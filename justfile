@@ -1,5 +1,29 @@
-docker  := `which docker`
-micropython := docker + ' run -ti -v ./:/workspace -w /workspace --rm micropython/unix:v1.26.0@sha256:5c45d10073e2ee300ca1d4c50ba9895e7748e383657271b0d1ad15e2b6ab9d06 micropython'
+build-path := '.build'
+
+mpy-cross := `which mpy-cross`
+mpremote := `which mpremote`
 
 run:
-  {{micropython}} main.py
+  #!/usr/bin/env bash
+  set -exuo pipefail
+
+  {{mpremote}} mount . run --no-follow main.py repl
+
+build: (clean)
+  #!/usr/bin/env bash
+  set -exuo pipefail
+
+  mkdir -p {{build-path}}
+  find . -name '*.py' | xargs -P 0 -I {} sh -c 'mkdir -p "{{build-path}}/$(dirname "$1")" && mpy-cross -o "{{build-path}}/${1%.py}.mpy" "$1"' _ {}
+
+clean:
+  #!/usr/bin/env bash
+  set -exuo pipefail
+
+  rm -rf {{build-path}}
+
+upload: (build)
+  #!/usr/bin/env bash
+  set -exuo pipefail
+
+  {{mpremote}} cp -r {{build-path}}/* : + soft-reset

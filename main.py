@@ -20,5 +20,4 @@ def main() -> None:
             print(f"Shutdown Error: {e}")
 
 
-if __name__ == "__main__":
-    main()
+main()
