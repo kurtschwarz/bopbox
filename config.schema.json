@@ -6,11 +6,19 @@
     "debug_mode": {
       "type": "boolean"
     },
+
     "wifi_ssid": {
       "type": "string"
     },
     "wifi_password": {
       "type": "string"
+    },
+
+    "http_server_enabled": {
+      "type": "boolean"
+    },
+    "http_server_port": {
+      "type": "integer"
     }
   },
   "required": [

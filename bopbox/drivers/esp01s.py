@@ -22,6 +22,12 @@ _CMD_WIFI_GET_MODE = const(b"AT+CWMODE?")
 _CMD_WIFI_SET_MODE = const(b"AT+CWMODE=")
 _CMD_WIFI_CONNECT_AP = const(b"AT+CWJAP=")
 _CMD_WIFI_DISCONNECT_AP = const(b"AT+CWQAP")
+# TCP/IP AT Commands
+# ref: https://espressif-docs.readthedocs-hosted.com/projects/esp-at/en/release-v2.3.0.0_esp8266/AT_Command_Set/TCP-IP_AT_Commands.html
+_CMD_TCP_GET_CONNECTION_MULTIPLEXING = const(b"AT+CIPMUX?")
+_CMD_TCP_SET_CONNECTION_MULTIPLEXING = const(b"AT+CIPMUX=")
+_CMD_TCP_START_SERVER = const(b"AT+CIPSERVER=")
+_CMD_TCP_STOP_SERVER = const(b"AT+CIPSERVER=")
 
 _CMD_RESPONSE_OK = const(b"OK\r\n")
 _CMD_RESPONSE_ERROR = const(b"ERROR\r\n")
@@ -31,6 +37,9 @@ WIFI_MODE_OFF = const(0)
 WIFI_MODE_STATION = const(1)
 WIFI_MODE_ACCESS_POINT = const(2)
 WIFI_MODE_BOTH = const(WIFI_MODE_STATION + WIFI_MODE_ACCESS_POINT)
+
+SERVER_MULTIPLEXING_MODE_OFF = const(0)
+SERVER_MULTIPLEXING_MODE_ON = const(1)
 
 
 class ESP01S:
@@ -231,4 +240,36 @@ class ESP01S:
           bool: True if we disconnected, False otherwise
         """
         response = await self._send_command(_CMD_WIFI_DISCONNECT_AP)
+        return _CMD_RESPONSE_OK in response
+
+    async def set_tcp_server_connection_multiplexing(
+        self, mode: int = SERVER_MULTIPLEXING_MODE_ON
+    ) -> bool:
+        response = await self._send_command(
+            _CMD_TCP_SET_CONNECTION_MULTIPLEXING
+            + self._build_params(
+                required=[str(mode).encode()],
+            )
+        )
+
+        return _CMD_RESPONSE_OK in response
+
+    async def start_tcp_server(self, port: int) -> bool:
+        response = await self._send_command(
+            _CMD_TCP_START_SERVER
+            + self._build_params(
+                required=[b"1", str(port).encode()],
+            )
+        )
+
+        return _CMD_RESPONSE_OK in response
+
+    async def stop_tcp_server(self) -> bool:
+        response = await self._send_command(
+            _CMD_TCP_STOP_SERVER
+            + self._build_params(
+                required=[b"0"],
+            )
+        )
+
         return _CMD_RESPONSE_OK in response

@@ -29,6 +29,11 @@ class BopBox:
                 password=config.wifi_password.encode(),
             )
 
+        if config.http_server_enabled and config.http_server_port:
+            await self._network.start_http_server(
+                port=config.http_server_port,
+            )
+
         # Wait for all tasks to complete
         await uasyncio.gather(*self._tasks)
 

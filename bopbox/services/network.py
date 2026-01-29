@@ -32,10 +32,19 @@ class Network:
         self._logger.info(f"Connected to the wifi network ssid=\"{ssid.decode()}\"")
         return True
 
+    async def start_http_server(self, port: int) -> None:
+        self._logger.info(f"Starting an HTTP server port=\"{port}\"")
+
+        await self._driver.set_tcp_server_connection_multiplexing(esp01s.SERVER_MULTIPLEXING_MODE_ON)
+        await self._driver.start_tcp_server(port)
+
+        self._logger.info(f"HTTP server up and running on port=\"{port}\"")
+
     async def run(self) -> None:
         while True:
             # Poll the ESP01S for new data
             await self._driver.poll()
 
     async def shutdown(self) -> None:
+        await self._driver.stop_tcp_server()
         await self._driver.disconnect_wifi_access_point()
