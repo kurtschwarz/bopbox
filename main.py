@@ -1,9 +1,7 @@
 import sys
 import uasyncio
 
-from bopbox import config
 from bopbox import bopbox
-from bopbox.services import logger
 
 
 def main() -> None:

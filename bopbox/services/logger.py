@@ -16,10 +16,10 @@ _LEVEL_NAMES = {
     ERROR: b"ERROR",
 }
 
-_loggers: dict[str, "Logger"] = {}
+_STREAM_STDOUT = sys.stdout
+_STREAM_STDERR = sys.stderr
 
-_stream_stdout = sys.stdout
-_stream_stderr = sys.stderr
+_loggers: dict[str, "Logger"] = {}
 
 
 def get_logger(
@@ -45,7 +45,7 @@ class Logger:
 
     def _log(self, level: int, message: str) -> None:
         if level >= self._level:
-            stream = _stream_stderr if level == ERROR else _stream_stdout
+            stream = _STREAM_STDERR if level == ERROR else _STREAM_STDOUT
             stream.write(f"[{self._scope}][{(_LEVEL_NAMES.get(level) or b"UNKNOWN").decode()}] {message}\n")
 
     def debug(self, message: str) -> None:
