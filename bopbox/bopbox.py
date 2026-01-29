@@ -1,26 +1,35 @@
 import time
+import uasyncio
 
-from .services import logger
+from .services import logger, network
 
 
 class BopBox:
-    __slots__ = ("_debug", "_logger")
+    __slots__ = ("_tasks", "_logger", "_network")
 
-    _debug: bool
+    _tasks: list[uasyncio.Task]
+
     _logger: logger.Logger
+    _network: network.Network
 
-    def __init__(self, debug: bool = False) -> None:
-        self._debug = debug
-        self._logger = logger.get_logger(
-            "bopbox", logger.DEBUG if debug else logger.INFO
-        )
+    def __init__(self) -> None:
+        self._tasks = []
+        self._logger = logger.get_logger("bopbox")
+        self._network = network.Network()
 
     async def run(self) -> None:
-        self._logger.info("Running")
+        # Start async tasks
+        self._tasks.append(uasyncio.create_task(self._network.run()))
 
-        while True:
-            time.sleep(1)
+        # Attempt to connect to WiFi
+        await self._network.connect(ssid=b"Malicious Toasters", password=b"beep boop")
+
+        # Wait for all tasks to complete
+        await uasyncio.gather(*self._tasks)
 
     async def shutdown(self) -> None:
         self._logger.info("Shutting down")
+
+        await self._network.shutdown()
+
         return None
