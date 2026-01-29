@@ -15,6 +15,7 @@ build: (clean)
 
   mkdir -p {{build-path}}
   find . -name '*.py' | xargs -P 0 -I {} sh -c 'mkdir -p "{{build-path}}/$(dirname "$1")" && mpy-cross -o "{{build-path}}/${1%.py}.mpy" "$1"' _ {}
+  cp config.json {{build-path}}
 
 clean:
   #!/usr/bin/env bash

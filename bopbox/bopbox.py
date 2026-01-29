@@ -1,6 +1,7 @@
 import time
 import uasyncio
 
+from .config import config
 from .services import logger, network
 
 
@@ -22,7 +23,11 @@ class BopBox:
         self._tasks.append(uasyncio.create_task(self._network.run()))
 
         # Attempt to connect to WiFi
-        await self._network.connect(ssid=b"Malicious Toasters", password=b"beep boop")
+        if config.wifi_ssid and config.wifi_password:
+            await self._network.connect(
+                ssid=config.wifi_ssid.encode(),
+                password=config.wifi_password.encode(),
+            )
 
         # Wait for all tasks to complete
         await uasyncio.gather(*self._tasks)

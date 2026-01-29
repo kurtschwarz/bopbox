@@ -2,7 +2,7 @@ import sys
 
 from micropython import const
 
-from .. import config
+from ..config import config
 
 DEBUG = const(0)
 INFO = const(1)
@@ -24,7 +24,7 @@ _stream_stderr = sys.stderr
 
 def get_logger(
     scope: str = "root",
-    level: int = DEBUG if config.DEBUG_MODE else INFO
+    level: int = DEBUG if config.debug_mode else INFO
 ) -> "Logger":
     """Get or create a logger for the given scope."""
     if scope not in _loggers:
@@ -34,21 +34,19 @@ def get_logger(
 
 
 class Logger:
-    __slots__ = ("_scope", "_level", "_level_name")
+    __slots__ = ("_scope", "_level")
 
     _scope: str
     _level: int
-    _level_name: bytes
 
     def __init__(self, scope: str, level: int) -> None:
         self._scope = scope.upper()
         self._level = level
-        self._level_name = _LEVEL_NAMES.get(level) or b"UNKNOWN"
 
     def _log(self, level: int, message: str) -> None:
         if level >= self._level:
             stream = _stream_stderr if level == ERROR else _stream_stdout
-            stream.write(f"[{self._scope}][{self._level_name.decode()}] {message}\n")
+            stream.write(f"[{self._scope}][{(_LEVEL_NAMES.get(level) or b"UNKNOWN").decode()}] {message}\n")
 
     def debug(self, message: str) -> None:
         self._log(DEBUG, message)
