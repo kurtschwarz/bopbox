@@ -18,7 +18,7 @@ def main() -> None:
         try:
             uasyncio.run(bop.shutdown())
         except Exception as e:
-            print(f"Shutdown Error: {e}")
+            sys.print_exception(e)
 
 
 main()

@@ -38,5 +38,4 @@ class Network:
             await self._driver.poll()
 
     async def shutdown(self) -> None:
-        self._logger.debug("Shutting down")
-        return None
+        await self._driver.disconnect_wifi_access_point()

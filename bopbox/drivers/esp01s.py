@@ -21,6 +21,7 @@ _CMD_TEST = const(b"AT")
 _CMD_WIFI_GET_MODE = const(b"AT+CWMODE?")
 _CMD_WIFI_SET_MODE = const(b"AT+CWMODE=")
 _CMD_WIFI_CONNECT_AP = const(b"AT+CWJAP=")
+_CMD_WIFI_DISCONNECT_AP = const(b"AT+CWQAP")
 
 _CMD_RESPONSE_OK = const(b"OK\r\n")
 _CMD_RESPONSE_ERROR = const(b"ERROR\r\n")
@@ -209,7 +210,7 @@ class ESP01S:
         Asks the ESP01S to connect to the specified access point ssid.
 
         Returns:
-          bool: True if we connect, False otherwise
+          bool: True if we connected, False otherwise
         """
         response = await self._send_command(
             _CMD_WIFI_CONNECT_AP
@@ -220,4 +221,14 @@ class ESP01S:
             timeout_ms=30000,  # 30 seconds
         )
 
+        return _CMD_RESPONSE_OK in response
+
+    async def disconnect_wifi_access_point(self) -> bool:
+        """
+        Asks the ESP01S to disconnect from the currently connected access point.
+
+        Returns:
+          bool: True if we disconnected, False otherwise
+        """
+        response = await self._send_command(_CMD_WIFI_DISCONNECT_AP)
         return _CMD_RESPONSE_OK in response

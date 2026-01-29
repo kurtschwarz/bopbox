@@ -30,6 +30,12 @@ class BopBox:
     async def shutdown(self) -> None:
         self._logger.info("Shutting down")
 
+        # Attempt to disconnect from WiFi (if connected)
         await self._network.shutdown()
 
+        # Cancel all running tasks
+        for task in self._tasks:
+            task.cancel()
+
+        self._logger.info("Shutdown complete")
         return None
