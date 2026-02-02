@@ -32,6 +32,7 @@ _CMD_TCP_SET_CONNECTION_MULTIPLEXING = const(b"AT+CIPMUX=")
 _CMD_TCP_START_SERVER = const(b"AT+CIPSERVER=")
 _CMD_TCP_STOP_SERVER = const(b"AT+CIPSERVER=")
 _CMD_TCP_SEND_DATA = const(b"AT+CIPSEND=")
+_CMD_TCP_SEND_DATA_EX = const(b"AT+CIPSEND=")
 
 _CMD_RESPONSE_OK = const(b"OK\r\n")
 _CMD_RESPONSE_ERROR = const(b"ERROR\r\n")
@@ -153,7 +154,7 @@ class ESP01S:
 
         return param
 
-    def _build_params(self, required: list[bytes], optional: list[bytes] | None = None):
+    def _build_params(self, required: list[bytes], optional: list[bytes | None] | None = None):
         """
         Build comma-separated AT command parameter string.
 
