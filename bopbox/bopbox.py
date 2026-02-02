@@ -4,7 +4,6 @@ import uasyncio
 from .config import config
 from .services import logger, network
 
-
 class BopBox:
     __slots__ = ("_tasks", "_logger", "_network")
 

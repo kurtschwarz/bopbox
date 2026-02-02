@@ -1,3 +1,10 @@
+try:
+    import typing
+except ImportError:
+    import mip
+
+    mip.install("github:josverl/micropython-stubs/mip/typing_mpy.json")
+
 import sys
 import uasyncio
 

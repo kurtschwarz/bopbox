@@ -1,7 +1,10 @@
 import machine
 import uasyncio
 
+from typing import Callable
 from micropython import const
+
+from . import _tcp
 
 
 _DEFAULT_UART_ID = const(1)
@@ -28,6 +31,7 @@ _CMD_TCP_GET_CONNECTION_MULTIPLEXING = const(b"AT+CIPMUX?")
 _CMD_TCP_SET_CONNECTION_MULTIPLEXING = const(b"AT+CIPMUX=")
 _CMD_TCP_START_SERVER = const(b"AT+CIPSERVER=")
 _CMD_TCP_STOP_SERVER = const(b"AT+CIPSERVER=")
+_CMD_TCP_SEND_DATA = const(b"AT+CIPSEND=")
 
 _CMD_RESPONSE_OK = const(b"OK\r\n")
 _CMD_RESPONSE_ERROR = const(b"ERROR\r\n")
@@ -49,6 +53,7 @@ class ESP01S:
         "_cmd_response_prefix",
         "_cmd_response_bytes",
         "_cmd_response_complete",
+        "_tcp_server",
     )
 
     _uart: machine.UART
@@ -58,11 +63,16 @@ class ESP01S:
     _cmd_response_bytes: bytes
     _cmd_response_complete: uasyncio.Event
 
+    _tcp_server: _tcp.TCPServer
+
     def __init__(
         self,
         uart_id: int = _DEFAULT_UART_ID,
         tx_pin: int = _DEFAULT_UART_TX_PIN,
         rx_pin: int = _DEFAULT_UART_RX_PIN,
+        on_tcp_connection_opened: Callable[[int], None] | None = None,
+        on_tcp_connection_closed: Callable[[int], None] | None = None,
+        on_tcp_connection_data: Callable[[int, memoryview], None] | None = None,
     ):
         self._uart = machine.UART(
             uart_id,
@@ -75,6 +85,12 @@ class ESP01S:
 
         self._cmd_lock = uasyncio.Lock()
         self._cmd_response_complete = uasyncio.Event()
+
+        self._tcp_server = _tcp.TCPServer(
+            on_tcp_connection_opened,
+            on_tcp_connection_closed,
+            on_tcp_connection_data,
+        )
 
         self._flush()
 
@@ -93,10 +109,10 @@ class ESP01S:
         - AT -> AT
 
         Args:
-          command (bytes): Command to determine the prefix from.
+            command (bytes): Command to determine the prefix from.
 
         Returns:
-          bytes: Expected prefix for the given command.
+            bytes: Expected prefix for the given command.
         """
         if command == _CMD_TEST:
             # The AT command is a special child that does not follow any of the others,
@@ -107,35 +123,63 @@ class ESP01S:
         for i in range(3, len(command)):
             c = command[i]
             # keep reading until we find the end of the command name (denoted by ?, = or a line ending)
-            if c in (ord("="), ord("?"), ord("\r"), ord("\n")):
+            if c in (61, 63, 13, 10):  # ord("="), ord("?"), ord("\r"), ord("\n")
                 break
             end = i + 1
 
         return b"+" + command[3:end]
 
-    def _escape_param(self, input: bytes) -> bytes:
-        if b" " in input or b'"' in input or b"," in input or b"\\" in input:
-            return (
-                b'"'
-                + input.lstrip(b'"')
-                .rstrip(b'"')
-                .replace(b"\\", b"\\\\")
-                .replace(b'"', b'\\"')
-                .replace(b",", b"\\,")
-                + b'"'
-            )
+    def _escape_param(self, param: bytes):
+        """
+        Escape parameter for AT command if needed.
 
-        return input
+        Quotes and escapes params containing special characters (space,
+        quote, comma, backslash). Pre-quoted params are normalized.
 
-    def _build_params(
-        self, required: list[bytes], optional: list[bytes | None] = []
-    ) -> bytes:
-        return b",".join(
-            map(
-                self._escape_param,
-                required + [param for param in optional if param is not None],
-            )
-        )
+        Args:
+            param (bytes): Raw parameter as bytes.
+
+        Returns:
+            Original param if clean, otherwise escaped and quoted bytes.
+        """
+
+        if b" " in param or b'"' in param or b"," in param or b"\\" in param:
+            p = param.lstrip(b'"').rstrip(b'"')
+            p = p.replace(b"\\", b"\\\\")
+            p = p.replace(b'"', b'\\"')
+            p = p.replace(b",", b"\\,")
+
+            return b'"' + p + b'"'
+
+        return param
+
+    def _build_params(self, required: list[bytes], optional: list[bytes] | None = None):
+        """
+        Build comma-separated AT command parameter string.
+
+        Escapes and joins required params, then any non-None optional params.
+
+        Args:
+            required: List of bytes params to include.
+            optional: List of bytes or None; None values are skipped.
+
+        Returns:
+            Escaped params joined by commas, e.g. b'"param1","param2"'
+        """
+
+        parts = []
+        append = parts.append
+        escape = self._escape_param
+
+        for p in required:
+            append(escape(p))
+
+        if optional:
+            for p in optional:
+                if p is not None:
+                    append(escape(p))
+
+        return b",".join(parts)
 
     async def _send_command(
         self, command: bytes, timeout_ms: int = _DEFAULT_CMD_TIMEOUT_MS
@@ -162,7 +206,9 @@ class ESP01S:
         if self._uart.any():
             chunk = self._uart.read()
             if chunk:
-                # @TODO add handling for network requests/responses
+                # Handle tcp server messages
+                if self._tcp_server:
+                    self._tcp_server.handle_message(chunk)
 
                 # Handle responses if we sent a command
                 if self._cmd_lock.locked:
@@ -189,7 +235,7 @@ class ESP01S:
         Sends a test command to the ESP01S. This is useful to verify we can talk to it using UART.
 
         Returns:
-          bool: True if we get a successful response, False otherwise.
+            bool: True if we get a successful response, False otherwise.
         """
         return _CMD_RESPONSE_OK in await self._send_command(_CMD_TEST)
 
@@ -203,7 +249,7 @@ class ESP01S:
         - WIFI_MODE_BOTH -- does both modes above at the same time
 
         Returns:
-          bool: True if the mode was set, False otherwise
+            bool: True if the mode was set, False otherwise
         """
 
         response = await self._send_command(
@@ -219,7 +265,7 @@ class ESP01S:
         Asks the ESP01S to connect to the specified access point ssid.
 
         Returns:
-          bool: True if we connected, False otherwise
+            bool: True if we connected, False otherwise
         """
         response = await self._send_command(
             _CMD_WIFI_CONNECT_AP
@@ -237,7 +283,7 @@ class ESP01S:
         Asks the ESP01S to disconnect from the currently connected access point.
 
         Returns:
-          bool: True if we disconnected, False otherwise
+            bool: True if we disconnected, False otherwise
         """
         response = await self._send_command(_CMD_WIFI_DISCONNECT_AP)
         return _CMD_RESPONSE_OK in response
@@ -245,6 +291,23 @@ class ESP01S:
     async def set_tcp_server_connection_multiplexing(
         self, mode: int = SERVER_MULTIPLEXING_MODE_ON
     ) -> bool:
+        """
+        Configure the TCP connection multiplexing mode.
+
+        Sends the AT+CIPMUX=<mode> command to enable or disable multiple
+        simultaneous TCP connections. Multi-connection mode is recommended
+        before starting a TCP server.
+
+        Args:
+            mode: The multiplexing mode to set.
+                - SERVER_MULTIPLEXING_MODE_ON (1): Enable multiple connections.
+                - SERVER_MULTIPLEXING_MODE_OFF (0): Single connection only.
+                Defaults to SERVER_MULTIPLEXING_MODE_ON.
+
+        Returns:
+            bool: True if the mode was successfully set, False otherwise.
+        """
+
         response = await self._send_command(
             _CMD_TCP_SET_CONNECTION_MULTIPLEXING
             + self._build_params(
@@ -255,6 +318,19 @@ class ESP01S:
         return _CMD_RESPONSE_OK in response
 
     async def start_tcp_server(self, port: int) -> bool:
+        """
+        Start a TCP server on the ESP-01S module.
+
+        Sends the AT+CIPSERVER=1,<port> command to begin listening for
+        incoming TCP connections on the specified port.
+
+        Args:
+            port: The TCP port number to listen on (e.g., 80 for HTTP).
+
+        Returns:
+            bool: True if the server was successfully started, False otherwise.
+        """
+
         response = await self._send_command(
             _CMD_TCP_START_SERVER
             + self._build_params(
@@ -265,6 +341,16 @@ class ESP01S:
         return _CMD_RESPONSE_OK in response
 
     async def stop_tcp_server(self) -> bool:
+        """
+        Stop the TCP server on the ESP-01S module.
+
+        Sends the AT+CIPSERVER=0 command to close any active TCP server
+        and stop listening for incoming connections.
+
+        Returns:
+            bool: True if the server was successfully stopped, False otherwise.
+        """
+
         response = await self._send_command(
             _CMD_TCP_STOP_SERVER
             + self._build_params(
@@ -273,3 +359,10 @@ class ESP01S:
         )
 
         return _CMD_RESPONSE_OK in response
+
+    async def send_tcp_server_connection_data(
+        self,
+        connection_id: int,
+        data: memoryview,
+    ) -> None:
+        pass
