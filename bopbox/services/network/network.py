@@ -112,7 +112,7 @@ class Network:
     async def run(self) -> None:
         while True:
             # Poll the ESP01S for new data
-            await self._driver.poll()
+            await self._driver.receive()
 
     async def shutdown(self) -> None:
         await self._driver.stop_tcp_server()

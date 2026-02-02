@@ -203,7 +203,7 @@ class ESP01S:
 
             return response
 
-    async def poll(self) -> None:
+    async def receive(self) -> None:
         if self._uart.any():
             chunk = self._uart.read()
             if chunk:
