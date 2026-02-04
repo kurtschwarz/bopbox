@@ -3,6 +3,8 @@ build-path := '.build'
 mpy-cross := `which mpy-cross`
 mpremote := `which mpremote`
 
+python := './.venv/bin/python'
+
 run:
   #!/usr/bin/env bash
   set -exuo pipefail
@@ -28,3 +30,10 @@ upload: (build)
   set -exuo pipefail
 
   {{mpremote}} cp -r {{build-path}}/* : + soft-reset
+
+test *ARGS='':
+  #!/usr/bin/env bash
+  source .venv/bin/activate
+
+  set -exuo pipefail
+  python -m pytest {{ARGS}}

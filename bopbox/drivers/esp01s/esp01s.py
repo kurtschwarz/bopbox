@@ -146,10 +146,10 @@ class ESP01S:
         """
 
         if b" " in param or b'"' in param or b"," in param or b"\\" in param:
-            p = param.lstrip(b'"').rstrip(b'"')
-            p = p.replace(b"\\", b"\\\\")
-            p = p.replace(b'"', b'\\"')
-            p = p.replace(b",", b"\\,")
+            p = param.lstrip(b'"')
+            p = p.replace(b"\\", b"\\\\", -1)
+            p = p.replace(b'"', b'\\"', -1)
+            p = p.replace(b",", b"\\,", -1)
 
             return b'"' + p + b'"'
 
