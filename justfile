@@ -3,7 +3,7 @@ build-path := '.build'
 mpy-cross := `which mpy-cross`
 mpremote := `which mpremote`
 
-python := './.venv/bin/python'
+pytest := './.venv/bin/pytest'
 
 run:
   #!/usr/bin/env bash
@@ -36,4 +36,4 @@ test *ARGS='':
   source .venv/bin/activate
 
   set -exuo pipefail
-  python -m pytest {{ARGS}}
+  {{pytest}} --cov=bopbox test/
