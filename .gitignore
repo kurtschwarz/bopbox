@@ -1,6 +1,7 @@
 .wip/
 .build/
 .venv/
+.pytest_cache/
 __pycache__/
 
 config.json
