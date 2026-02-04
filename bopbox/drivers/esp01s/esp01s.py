@@ -31,6 +31,7 @@ _CMD_TCP_GET_CONNECTION_MULTIPLEXING = const(b"AT+CIPMUX?")
 _CMD_TCP_SET_CONNECTION_MULTIPLEXING = const(b"AT+CIPMUX=")
 _CMD_TCP_START_SERVER = const(b"AT+CIPSERVER=")
 _CMD_TCP_STOP_SERVER = const(b"AT+CIPSERVER=")
+_CMD_TCP_SET_IPD_MESSAGE_MODE = const(b"AT+CIPDINFO=")
 _CMD_TCP_SEND_DATA = const(b"AT+CIPSEND=")
 _CMD_TCP_SEND_DATA_EX = const(b"AT+CIPSEND=")
 
@@ -183,7 +184,9 @@ class ESP01S:
         return b",".join(parts)
 
     async def _send_command(
-        self, command: bytes, timeout_ms: int = _DEFAULT_CMD_TIMEOUT_MS
+        self,
+        command: bytes,
+        timeout_ms: int = _DEFAULT_CMD_TIMEOUT_MS,
     ):
         async with self._cmd_lock:
             self._cmd_response_prefix = self._get_cmd_response_prefix(command)
@@ -287,6 +290,35 @@ class ESP01S:
             bool: True if we disconnected, False otherwise
         """
         response = await self._send_command(_CMD_WIFI_DISCONNECT_AP)
+        return _CMD_RESPONSE_OK in response
+
+    async def set_tcp_ipd_message_mode(
+        self,
+        mode: int = 0,
+    ) -> bool:
+        """
+        Configure the format of incoming +IPD data messages.
+
+        Sends the AT+CIPDINFO=<mode> command to control whether the remote
+        IP address and port are included in +IPD messages.
+
+        Args:
+            mode (int): The +IPD message format.
+                - 0: Short format (default).
+                    +IPD,<conn_id>,<len>:<data>
+                - 1: Extended format with remote endpoint info.
+                    +IPD,<conn_id>,<len>,<remote_ip>,<remote_port>:<data>
+
+        Returns:
+            bool: True if the mode was successfully set, False otherwise.
+        """
+        response = await self._send_command(
+            _CMD_TCP_SET_IPD_MESSAGE_MODE
+            + self._build_params(
+                required=[str(mode).encode()],
+            )
+        )
+
         return _CMD_RESPONSE_OK in response
 
     async def set_tcp_server_connection_multiplexing(

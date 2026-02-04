@@ -58,6 +58,7 @@ class Network:
 
         self._http_server_requests = {}
 
+        await self._driver.set_tcp_ipd_message_mode(1)
         await self._driver.set_tcp_server_connection_multiplexing(
             esp01s.SERVER_MULTIPLEXING_MODE_ON
         )
