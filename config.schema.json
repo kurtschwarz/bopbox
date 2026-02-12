@@ -19,6 +19,10 @@
     },
     "http_server_port": {
       "type": "integer"
+    },
+
+    "nfc_enabled": {
+      "type": "boolean"
     }
   },
   "required": [

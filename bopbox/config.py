@@ -8,6 +8,7 @@ class Config:
         "wifi_password",
         "http_server_enabled",
         "http_server_port",
+        "nfc_enabled",
     )
 
     debug_mode: bool
@@ -18,6 +19,8 @@ class Config:
     http_server_enabled: bool | None
     http_server_port: int | None
 
+    nfc_enabled: bool | None
+
     def __init__(self) -> None:
         self.debug_mode = False
 
@@ -26,6 +29,8 @@ class Config:
 
         self.http_server_enabled = False
         self.http_server_port = None
+
+        self.nfc_enabled = False
 
         self.load()
 

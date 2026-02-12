@@ -28,9 +28,10 @@ class BopBox:
     async def run(self) -> None:
         # Start async tasks
         self._tasks.append(uasyncio.create_task(self._network.run()))
-        self._tasks.append(uasyncio.create_task(self._nfc.run()))
 
-        await self._nfc.startup()
+        if config.nfc_enabled:
+            self._tasks.append(uasyncio.create_task(self._nfc.run()))
+            await self._nfc.startup()
 
         # Attempt to connect to WiFi
         if config.wifi_ssid and config.wifi_password:
@@ -52,8 +53,10 @@ class BopBox:
 
         # Attempt to disconnect from WiFi (if connected)
         await self._network.shutdown()
-        # Shut down the NFC reader
-        await self._nfc.shutdown()
+
+        if config.nfc_enabled:
+            # Shut down the NFC reader
+            await self._nfc.shutdown()
 
         # Cancel all running tasks
         for task in self._tasks:
