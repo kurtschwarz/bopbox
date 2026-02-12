@@ -19,6 +19,7 @@ _DEFAULT_CMD_TIMEOUT_MS = const(5000)  # 5 seconds
 
 # ref: https://www.nxp.com/docs/en/user-guide/141520.pdf (§7)
 _CMD_GET_FIRMWARE_VERSION = const(0x02)
+_CMD_IN_LIST_PASSIVE_TARGET = const(0x4A)
 
 # ref: https://www.nxp.com/docs/en/user-guide/141520.pdf (§6.2.1.1)
 _FRAME_PART_PREAMBLE = const(0x00)
@@ -271,8 +272,6 @@ class PN532:
         command: int,
         data: list[int] = [],
     ) -> PN532Frame:
-        self._logger.debug(f"_send_command called with command={command}")
-
         async with self._send_command_lock:
             await self.wake_up()
 
@@ -280,9 +279,10 @@ class PN532:
             command_frame = self._build_command_frame(command, data)
             await self._write_bytes(command_frame)
 
-            # wait for the ACK
+            # wait for the ACK frame
             await self._wait_frame(_FRAME_TYPE_ACK)
 
+            # wait and return data frame
             return await self._wait_frame(_FRAME_TYPE_DATA)
 
     # --- UART Writing -----------------------------------------
@@ -296,13 +296,9 @@ class PN532:
     # --- UART Reading -----------------------------------------
 
     def _handle_frame_parser_error(self, error: PN532Error) -> None:
-        self._logger.debug(f"_handle_frame_parser_error error={error}")
-
         self._frame_ready.clear()
 
     def _handle_frame_parser_result(self, frame: PN532Frame) -> None:
-        self._logger.debug(f"_handle_frame_parser_result frame={frame}")
-
         self._frame_ready.set()
         self._frame_queue.append(frame)
 
@@ -311,10 +307,7 @@ class PN532:
         if self._uart.any():
             data = self._uart.read()
             if data:
-                self._logger.debug(f"received data={data}")
                 self._frame_parser.process(data)
-
-        await uasyncio.sleep_ms(100)
 
     #
 
@@ -356,3 +349,26 @@ class PN532:
     async def get_firmware_version(self) -> tuple:
         frame = await self._send_command(_CMD_GET_FIRMWARE_VERSION)
         return (frame.data[0], frame.data[1], frame.data[2], frame.data[3])
+
+    async def get_passive_target(self) -> bytes | None:
+        frame = await self._send_command(_CMD_IN_LIST_PASSIVE_TARGET, [0x01, 0x00])
+        if frame.data is None or frame.data[0] == 0x00:
+            return None
+
+        return bytes(frame.data[6:6 + frame.data[5]])
+
+    async def sam_config(self, mode=0x01):
+        await self._send_command(0x14, [mode, 0x14, 0x01])
+
+    async def set_retries(self, atr=0xFF, psl=0x01, passive=0x14):
+        """
+        Configure PN532 retry limits via RFConfiguration.
+
+        Args:
+            atr: Max ATR retries (0xFF = infinite)
+            psl: Max PSL retries
+            passive: Max passive activation retries.
+                    Each retry is ~50ms. 0x14 (20) ≈ 1 second.
+                    0xFF = wait forever.
+        """
+        await self._send_command(0x32, data=[0x05, atr, psl, passive])
