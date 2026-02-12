@@ -28,10 +28,7 @@ class NFC:
 
     async def startup(self) -> None:
         self._logger.debug("starting up")
-
-        if isinstance(self._driver, pn532.PN532):
-          await self._driver.wake_up()
-          await self._driver.get_firmware_version()
+        await self._driver.wake_up()
 
     async def shutdown(self) -> None:
         self._logger.debug("shutting down")

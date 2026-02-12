@@ -26,11 +26,11 @@ class BopBox:
         self._nfc = nfc.NFC()
 
     async def run(self) -> None:
-        await self._nfc.startup()
-
         # Start async tasks
         self._tasks.append(uasyncio.create_task(self._network.run()))
         self._tasks.append(uasyncio.create_task(self._nfc.run()))
+
+        await self._nfc.startup()
 
         # Attempt to connect to WiFi
         if config.wifi_ssid and config.wifi_password:

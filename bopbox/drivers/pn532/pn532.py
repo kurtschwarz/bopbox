@@ -2,6 +2,7 @@ import utime
 import uasyncio
 import machine
 
+from typing import Callable
 from micropython import const
 
 from ...services import logger
@@ -29,6 +30,161 @@ _FRAME_PART_PN532_TO_HOST = const(0xD5)
 
 _FRAME_WAKE_UP = const(b"\x55\x55\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00")
 
+_FRAME_TYPE_ACK = const(0)
+_FRAME_TYPE_NACK = const(1)
+_FRAME_TYPE_DATA = const(2)
+
+_FRAME_PARSER_STATE_IDLE = const(0)
+_FRAME_PARSER_STATE_PARSE_START1 = const(1)
+_FRAME_PARSER_STATE_PARSE_LEN = const(2)
+_FRAME_PARSER_STATE_PARSE_LCS = const(3)
+_FRAME_PARSER_STATE_PARSE_BODY = const(4)
+_FRAME_PARSER_STATE_PARSE_DCS = const(5)
+_FRAME_PARSER_STATE_PARSE_POSTAMBLE = const(6)
+
+
+class PN532Frame:
+    __slots__ = (
+        "type",
+        "command",
+        "data",
+    )
+
+    type: int
+    command: int | None
+    data: bytearray | None
+
+    def __init__(
+        self,
+        type: int,
+        command: int | None = None,
+        data: bytearray | None = None,
+    ) -> None:
+        self.type = type
+        self.command = command
+        self.data = data
+
+
+class PN532FrameParser:
+    __slots__ = (
+        "_state",
+        "_buffer",
+        "_pos",
+        "_len",
+        "_lcs",
+        "_on_error",
+        "_on_frame",
+    )
+
+    _state: int
+
+    _buf: bytearray
+    _pos: int
+    _len: int
+    _lcs: int
+
+    _on_error: Callable[[PN532Error], None]
+    _on_frame: Callable[[PN532Frame], None]
+
+    def __init__(
+        self,
+        on_error: Callable[[PN532Error], None],
+        on_frame: Callable[[PN532Frame], None],
+    ) -> None:
+        self._state = _FRAME_PARSER_STATE_IDLE
+        self._buffer = bytearray(_DEFAULT_UART_RX_BUFFER_LEN)
+        self._pos = 0
+        self._len = 0
+        self._lcs = 0
+        self._on_error = on_error
+        self._on_frame = on_frame
+
+    def reset(self) -> None:
+        self._state = _FRAME_PARSER_STATE_IDLE
+        self._pos = 0
+        self._len = 0
+        self._lcs = 0
+
+    def _signal_error(self, error: PN532Error) -> None:
+        self._on_error(error)
+        self.reset()
+
+    def _signal_frame(self, frame: PN532Frame) -> None:
+        self._on_frame(frame)
+
+    def process(self, data: bytes) -> None:
+        buffer = self._buffer
+
+        for i in range(len(data)):
+            byte = data[i]
+            state = self._state
+
+            if state == _FRAME_PARSER_STATE_IDLE:
+                if byte == _FRAME_PART_START_CODE1:
+                    self._state = _FRAME_PARSER_STATE_PARSE_START1
+
+            elif state == _FRAME_PARSER_STATE_PARSE_START1:
+                if byte == _FRAME_PART_START_CODE2:
+                    self._state = _FRAME_PARSER_STATE_PARSE_LEN
+                elif byte != _FRAME_PART_START_CODE1:
+                    self._state = _FRAME_PARSER_STATE_IDLE
+
+            elif state == _FRAME_PARSER_STATE_PARSE_LEN:
+                self._len = byte
+                self._state = _FRAME_PARSER_STATE_PARSE_LCS
+
+            elif state == _FRAME_PARSER_STATE_PARSE_LCS:
+                self._lcs = byte
+
+                ln = self._len
+                lcs = self._lcs
+
+                if ln == 0x00 and lcs == 0xFF:
+                    self._len = 0
+                    self._state = _FRAME_PARSER_STATE_PARSE_POSTAMBLE
+                elif ln == 0xFF and lcs == 0x00:
+                    self._state = _FRAME_PARSER_STATE_PARSE_POSTAMBLE
+                elif (ln + lcs) & 0xFF != 0:
+                    self._signal_error(PN532Error(f"Bad LCS: {lcs}"))
+                elif ln < 1:
+                    self._signal_error(PN532Error("Empty Frame"))
+                elif ln > len(self._buffer):
+                    self._signal_error(PN532Error(f"Frame too large: {ln}"))
+                else:
+                    self._pos = 0
+                    self._state = _FRAME_PARSER_STATE_PARSE_BODY
+
+            elif state == _FRAME_PARSER_STATE_PARSE_BODY:
+                buffer[self._pos] = byte
+                self._pos += 1
+                if self._pos >= self._len:
+                    self._state = _FRAME_PARSER_STATE_PARSE_DCS
+
+            elif state == _FRAME_PARSER_STATE_PARSE_DCS:
+                dcs_sum = byte
+                for j in range(self._len):
+                    dcs_sum += buffer[j]
+
+                if dcs_sum & 0xFF != 0:
+                    self._signal_error(PN532Error(f"Bad DCS: {dcs_sum}"))
+                else:
+                    self._state = _FRAME_PARSER_STATE_PARSE_POSTAMBLE
+
+            elif state == _FRAME_PARSER_STATE_PARSE_POSTAMBLE:
+                ln = self._len
+                if ln == 0:
+                    self._signal_frame(PN532Frame(_FRAME_TYPE_ACK))
+                elif ln == 0xFF:
+                    self._signal_frame(PN532Frame(_FRAME_TYPE_NACK))
+                elif buffer[0] != _FRAME_PART_PN532_TO_HOST:
+                    self._signal_error(PN532Error(f"Bad TFI: {buffer[0]}"))
+                else:
+                  self._signal_frame(
+                      PN532Frame(_FRAME_TYPE_DATA, buffer[1], buffer[2:ln])
+                  )
+
+                self._state = _FRAME_PARSER_STATE_IDLE
+
 
 class PN532Error(Exception):
     def __init__(self, *args: object) -> None:
@@ -40,12 +196,19 @@ class PN532:
         "_logger",
         "_uart",
         "_send_command_lock",
+        "_frame_parser",
+        "_frame_ready",
+        "_frame_queue",
     )
 
     _logger: logger.Logger
     _uart: machine.UART
 
     _send_command_lock: uasyncio.Lock
+
+    _frame_parser: PN532FrameParser
+    _frame_ready: uasyncio.Event
+    _frame_queue: list[PN532Frame]
 
     def __init__(
         self,
@@ -65,6 +228,14 @@ class PN532:
         )
 
         self._send_command_lock = uasyncio.Lock()
+
+        self._frame_parser = PN532FrameParser(
+            on_error=self._handle_frame_parser_error,
+            on_frame=self._handle_frame_parser_result,
+        )
+
+        self._frame_ready = uasyncio.Event()
+        self._frame_queue = []
 
     # ── Command Building & Sending ────────────────────────────
 
@@ -99,13 +270,20 @@ class PN532:
         self,
         command: int,
         data: list[int] = [],
-    ):
+    ) -> PN532Frame:
         self._logger.debug(f"_send_command called with command={command}")
 
         async with self._send_command_lock:
+            await self.wake_up()
+
             # build and send the command frame
             command_frame = self._build_command_frame(command, data)
             await self._write_bytes(command_frame)
+
+            # wait for the ACK
+            await self._wait_frame(_FRAME_TYPE_ACK)
+
+            return await self._wait_frame(_FRAME_TYPE_DATA)
 
     # --- UART Writing -----------------------------------------
 
@@ -117,21 +295,64 @@ class PN532:
 
     # --- UART Reading -----------------------------------------
 
+    def _handle_frame_parser_error(self, error: PN532Error) -> None:
+        self._logger.debug(f"_handle_frame_parser_error error={error}")
+
+        self._frame_ready.clear()
+
+    def _handle_frame_parser_result(self, frame: PN532Frame) -> None:
+        self._logger.debug(f"_handle_frame_parser_result frame={frame}")
+
+        self._frame_ready.set()
+        self._frame_queue.append(frame)
+
     async def receive(self) -> None:
         """Read data from UART"""
         if self._uart.any():
             data = self._uart.read()
             if data:
                 self._logger.debug(f"received data={data}")
+                self._frame_parser.process(data)
 
         await uasyncio.sleep_ms(100)
+
+    #
+
+    async def _wait_frame(
+        self,
+        expected_type=None,
+        timeout_ms=_DEFAULT_CMD_TIMEOUT_MS,
+    ):
+        deadline = utime.ticks_add(utime.ticks_ms(), timeout_ms)
+
+        while True:
+            if self._frame_queue:
+                frame = self._frame_queue.pop(0)
+                if expected_type is None or frame.type == expected_type:
+                    return frame
+
+                continue
+
+            remaining = utime.ticks_diff(deadline, utime.ticks_ms())
+            if remaining <= 0:
+                raise PN532Error("timeout")
+
+            self._frame_ready.clear()
+
+            try:
+                await uasyncio.wait_for(
+                    self._frame_ready.wait(),
+                    remaining,
+                )
+            except uasyncio.TimeoutError:
+                raise PN532Error("timeout")
 
     # --- High-Level Commands ----------------------------------
 
     async def wake_up(self) -> None:
         """Wake PN532 from low-power state on HSU interface."""
         await self._write_bytes(_FRAME_WAKE_UP)
-        await uasyncio.sleep_ms(100)
 
-    async def get_firmware_version(self) -> None:
-        await self._send_command(_CMD_GET_FIRMWARE_VERSION)
+    async def get_firmware_version(self) -> tuple:
+        frame = await self._send_command(_CMD_GET_FIRMWARE_VERSION)
+        return (frame.data[0], frame.data[1], frame.data[2], frame.data[3])
