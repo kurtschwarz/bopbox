@@ -1,20 +1,5 @@
 {
-    "python.languageServer": "Pylance",
-    "python.analysis.typeCheckingMode": "basic",
-    "python.analysis.diagnosticSeverityOverrides": {
-        "reportMissingModuleSource": "none"
-    },
-    "python.terminal.activateEnvironment": false,
-    "micropico.openOnStart": true,
-    "python.analysis.typeshedPaths": [
-        "~/.micropico-stubs/included"
-    ],
-    "python.analysis.extraPaths": [
-        "~/.micropico-stubs/included"
-    ],
-    "python.testing.pytestArgs": [
-        "test"
-    ],
-    "python.testing.unittestEnabled": false,
-    "python.testing.pytestEnabled": true
+    "go.toolsEnvVars": {
+        "GOFLAGS": "-tags=cortexm,baremetal,linux,arm,rp2350,rp,pico2,tinygo,purego,osusergo,math_big_pure_go,gc.conservative,scheduler.cores,serial.usb"
+    }
 }
