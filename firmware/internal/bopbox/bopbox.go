@@ -2,8 +2,11 @@ package bopbox
 
 import (
 	"log/slog"
-	"machine"
+	"sync"
 	"time"
+
+	"bopbox/internal/service"
+	"bopbox/internal/service/watchdog"
 )
 
 type Config struct {
@@ -19,34 +22,40 @@ var DefaultConfig = Config{
 }
 
 type BopBox struct {
-	config Config
-	log    *slog.Logger
+	config   Config
+	log      *slog.Logger
+	services *Services
+}
+
+type Services struct {
+	watchdog *watchdog.Service
+}
+
+func (s *Services) All() []service.Service {
+	return []service.Service{
+		s.watchdog,
+	}
 }
 
 func New(config Config) *BopBox {
 	return &BopBox{
 		config: config,
-		log:    slog.Default().With("component", "bopbox"),
+		log:    slog.Default().With("service", "bopbox"),
+		services: &Services{
+			watchdog: watchdog.New(watchdog.DefaultConfig),
+		},
 	}
 }
 
 func (b *BopBox) Run() {
-	b.log.Info("bopbox starting")
-	b.startWatchdog()
+	b.log.Info("running")
 
-	// for {
-	// 	machine.Watchdog.Update()
-	// }
-}
+	wg := sync.WaitGroup{}
+	for _, svc := range b.services.All() {
+		if err := svc.Start(&wg); err != nil {
+			b.log.Error("failed to start service", "name", svc.Name())
+		}
+	}
 
-func (b *BopBox) startWatchdog() {
-	machine.Watchdog.Configure(
-		machine.WatchdogConfig{
-			TimeoutMillis: b.config.WatchdogTimeoutMs,
-		},
-	)
-
-	machine.Watchdog.Start()
-
-	b.log.Info("watchdog started", "timeout_ms", b.config.WatchdogTimeoutMs)
+	wg.Wait()
 }
