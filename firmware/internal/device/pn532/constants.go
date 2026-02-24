@@ -13,6 +13,8 @@ const (
 // command timeout
 const DefaultCmdTimeout = 5 * time.Second
 
+const MaxTagUIDLen = 10
+
 // frame protocol constants (§6.2.1.1).
 const (
 	frameStartCode1  = 0x00
