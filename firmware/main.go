@@ -27,7 +27,7 @@ func waitForSerial(timeout time.Duration) bool {
 func main() {
 	var startTime = time.Now()
 
-	waitForSerial(2 * time.Second)
+	waitForSerial(5 * time.Second)
 
 	slog.SetDefault(
 		slog.New(

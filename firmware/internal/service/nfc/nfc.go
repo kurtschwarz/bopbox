@@ -49,6 +49,13 @@ func (s *Service) Start(
 ) error {
 	s.log.Info("starting")
 
+	if s.State() == service.Running {
+		s.log.Error("unable to start service, service already in running state")
+		return service.ErrAlreadyRunning
+	}
+
+	s.SetState(service.Starting)
+
 	machine.UART0.Configure(
 		machine.UARTConfig{
 			TX:       machine.GPIO0,
@@ -70,6 +77,19 @@ func (s *Service) Start(
 
 func (s *Service) Stop() error {
 	s.log.Info("stopping")
+
+	if s.State() == service.Stopped {
+		s.log.Error("unable to stop service, service is not running")
+		return service.ErrNotRunning
+	}
+
+	s.SetState(service.Stopping)
+
+	// @TODO: put the pn532 into sleep mode?
+
+	s.SetState(service.Stopped)
+
+	s.log.Info("stopped")
 	return nil
 }
 
@@ -77,6 +97,13 @@ func (s *Service) run(
 	wg *sync.WaitGroup,
 ) error {
 	s.log.Info("running")
+
+	if s.State() == service.Running {
+		s.log.Error("unable to run service, service is already running")
+		return service.ErrAlreadyRunning
+	}
+
+	s.SetState(service.Running)
 
 	defer wg.Done()
 	defer func() {
