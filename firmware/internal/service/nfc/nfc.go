@@ -8,6 +8,7 @@ import (
 	"machine"
 
 	"bopbox/internal/device/pn532"
+	"bopbox/internal/event"
 	"bopbox/internal/service"
 )
 
@@ -29,18 +30,21 @@ type Service struct {
 	log    *slog.Logger
 	config Config
 	device *pn532.Device
+	events *event.EventBus
 
 	lastTagUID pn532.UID
 }
 
 func New(
 	config Config,
+	events *event.EventBus,
 ) *Service {
 	return &Service{
 		Base:   *service.New("nfc"),
 		log:    slog.Default().With("service", "nfc"),
 		config: config,
 		device: nil,
+		events: events,
 	}
 }
 
@@ -132,6 +136,13 @@ func (s *Service) run(
 
 		s.lastTagUID = uid
 		s.log.Info("tag detected", "uid", uid)
+
+		s.events.Publish(
+			event.NewEvent(
+				event.EventTagDetected,
+				uid.Bytes(),
+			),
+		)
 
 		time.Sleep(s.config.Interval)
 	}

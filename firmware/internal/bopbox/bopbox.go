@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"bopbox/internal/event"
 	"bopbox/internal/service"
 	"bopbox/internal/service/nfc"
 	"bopbox/internal/service/watchdog"
@@ -25,6 +26,7 @@ var DefaultConfig = Config{
 type BopBox struct {
 	config   Config
 	log      *slog.Logger
+	events   *event.EventBus
 	services *Services
 }
 
@@ -41,12 +43,15 @@ func (s *Services) All() []service.Service {
 }
 
 func New(config Config) *BopBox {
+	events := event.NewBus()
+
 	return &BopBox{
-		config: config,
 		log:    slog.Default().With("service", "bopbox"),
+		config: config,
+		events: events,
 		services: &Services{
 			watchdog: watchdog.New(watchdog.DefaultConfig),
-			nfc:      nfc.New(nfc.DefaultConfig),
+			nfc:      nfc.New(nfc.DefaultConfig, events),
 		},
 	}
 }
