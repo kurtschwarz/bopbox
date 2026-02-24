@@ -16,7 +16,7 @@ type Config struct{}
 
 var DefaultConfig = Config{}
 
-// Device communicates with a PN532 over a Transporter.
+// Device communicates with a PN532 over a Transporter
 type Device struct {
 	config    Config
 	transport Transporter
@@ -41,16 +41,11 @@ func (d *Device) Init() {
 	d.wake()
 }
 
-// ── High-Level Commands ─────────────────────────────────────
-
-// SAMConfig configures the Security Access Module.
-// mode: 0x01 = normal mode (default).
 func (d *Device) SAMConfig(mode byte) error {
 	_, err := d.sendCommand(cmdSAMConfiguration, []byte{mode, 0x14, 0x01})
 	return err
 }
 
-// GetFirmwareVersion returns the PN532 IC, firmware version, revision, and feature support.
 func (d *Device) GetFirmwareVersion() (FirmwareVersion, error) {
 	f, err := d.sendCommand(cmdGetFirmwareVersion, nil)
 	if err != nil {
@@ -69,7 +64,33 @@ func (d *Device) GetFirmwareVersion() (FirmwareVersion, error) {
 	}, nil
 }
 
-// ── Command Building & Sending ──────────────────────────────
+func (d *Device) ReadTag() ([]byte, error) {
+	f, err := d.sendCommand(cmdInListPassiveTarget, []byte{0x01, 0x00})
+	if err != nil {
+		return nil, err
+	}
+
+	// data[0] = number of targets found
+	if len(f.data) == 0 || f.data[0] == 0x00 {
+		return nil, ErrNoTag
+	}
+
+	// data[5] = UID length, data[6:6+uidLen] = UID
+	if len(f.data) < 6 {
+		return nil, ErrEmptyFrame
+	}
+
+	uidLen := int(f.data[5])
+	if len(f.data) < 6+uidLen {
+		return nil, ErrEmptyFrame
+	}
+
+	// Return a copy so our buffer can be reused.
+	uid := make([]byte, uidLen)
+	copy(uid, f.data[6:6+uidLen])
+
+	return uid, nil
+}
 
 func (d *Device) sendCommand(
 	command byte,

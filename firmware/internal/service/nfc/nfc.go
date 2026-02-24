@@ -31,7 +31,9 @@ type Service struct {
 	device *pn532.Device
 }
 
-func New(config Config) *Service {
+func New(
+	config Config,
+) *Service {
 	return &Service{
 		Base:   *service.New("nfc"),
 		log:    slog.Default().With("service", "nfc"),
@@ -40,7 +42,9 @@ func New(config Config) *Service {
 	}
 }
 
-func (s *Service) Start(wg *sync.WaitGroup) error {
+func (s *Service) Start(
+	wg *sync.WaitGroup,
+) error {
 	s.log.Info("starting")
 
 	machine.UART0.Configure(
@@ -55,12 +59,8 @@ func (s *Service) Start(wg *sync.WaitGroup) error {
 	s.device.Init()
 	s.device.SAMConfig(0x01)
 
-	firmware, err := s.device.GetFirmwareVersion()
-	if err != nil {
-		s.log.Error("failed to fetch firmware version", "error", err)
-	}
-
-	s.log.Info("pn532 firmware version", "firmware", firmware)
+	wg.Add(1)
+	go s.run(wg)
 
 	s.log.Info("started")
 
@@ -72,7 +72,24 @@ func (s *Service) Stop() error {
 	return nil
 }
 
-func (s *Service) run(wg *sync.WaitGroup) error {
+func (s *Service) run(
+	wg *sync.WaitGroup,
+) error {
 	s.log.Info("running")
-	return nil
+
+	defer wg.Done()
+	defer func() {
+		if r := recover(); r != nil {
+			s.log.Error("panic recovered", "error", r)
+		}
+	}()
+
+	for {
+		uid, _ := s.device.ReadTag()
+		if uid != nil {
+			s.log.Info("tag detected", "uid", uid)
+		}
+
+		time.Sleep(s.config.Interval)
+	}
 }
