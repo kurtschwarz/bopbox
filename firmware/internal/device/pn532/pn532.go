@@ -79,32 +79,28 @@ func (d *Device) SetRetries(
 	return err
 }
 
-func (d *Device) ReadTag() ([]byte, error) {
+func (d *Device) ReadTag() (UID, error) {
 	f, err := d.sendCommand(cmdInListPassiveTarget, []byte{0x01, 0x00})
 	if err != nil {
-		return nil, err
+		return UID{}, err
 	}
 
 	// data[0] = number of targets found
 	if len(f.data) == 0 || f.data[0] == 0x00 {
-		return nil, ErrNoTag
+		return UID{}, ErrNoTag
 	}
 
 	// data[5] = UID length, data[6:6+uidLen] = UID
 	if len(f.data) < 6 {
-		return nil, ErrEmptyFrame
+		return UID{}, ErrEmptyFrame
 	}
 
 	uidLen := int(f.data[5])
 	if len(f.data) < 6+uidLen {
-		return nil, ErrEmptyFrame
+		return UID{}, ErrEmptyFrame
 	}
 
-	// Return a copy so our buffer can be reused.
-	uid := make([]byte, uidLen)
-	copy(uid, f.data[6:6+uidLen])
-
-	return uid, nil
+	return NewUID(f.data[6 : 6+uidLen]), nil
 }
 
 func (d *Device) sendCommand(

@@ -30,8 +30,7 @@ type Service struct {
 	config Config
 	device *pn532.Device
 
-	lastTagUID    [pn532.MaxTagUIDLen]byte
-	lastTagUIDLen int
+	lastTagUID pn532.UID
 }
 
 func New(
@@ -93,40 +92,20 @@ func (s *Service) run(
 				s.log.Error("read failed", "error", err.Error())
 			}
 
-			s.clearLastTagUID()
+			s.lastTagUID = pn532.UID{}
+			time.Sleep(s.config.Interval)
+
 			continue
 		}
 
-		if uid != nil {
-			if s.isSameTagUID(uid) {
-				continue
-			}
-
-			s.log.Info("tag detected", "uid", uid)
-			s.setLastTagUID(uid)
+		if uid.Equal(s.lastTagUID) {
+			time.Sleep(s.config.Interval)
+			continue
 		}
+
+		s.lastTagUID = uid
+		s.log.Info("tag detected", "uid", uid)
 
 		time.Sleep(s.config.Interval)
 	}
-}
-
-func (s *Service) isSameTagUID(uid []byte) bool {
-	if len(uid) != s.lastTagUIDLen {
-		return false
-	}
-
-	for i := 0; i < s.lastTagUIDLen; i++ {
-		if s.lastTagUID[i] != uid[i] {
-			return false
-		}
-	}
-
-	return true
-}
-func (s *Service) setLastTagUID(uid []byte) {
-	s.lastTagUIDLen = copy(s.lastTagUID[:], uid)
-}
-
-func (s *Service) clearLastTagUID() {
-	s.lastTagUIDLen = 0
 }
