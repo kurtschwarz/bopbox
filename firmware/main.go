@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log/slog"
 	"machine"
 	"time"
@@ -24,6 +25,8 @@ func waitForSerial(timeout time.Duration) bool {
 }
 
 func main() {
+	var startTime = time.Now()
+
 	waitForSerial(2 * time.Second)
 
 	slog.SetDefault(
@@ -33,6 +36,16 @@ func main() {
 				&tint.Options{
 					Level:      slog.LevelDebug,
 					TimeFormat: time.Kitchen,
+					ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+						if a.Key == slog.TimeKey {
+							elapsed := time.Since(startTime)
+							mins := int(elapsed.Minutes())
+							secs := elapsed.Seconds() - float64(mins*60)
+							a.Value = slog.StringValue(fmt.Sprintf("%02d:%05.2f", mins, secs))
+						}
+
+						return a
+					},
 				}),
 		),
 	)
