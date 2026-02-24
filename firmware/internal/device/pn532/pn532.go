@@ -38,7 +38,8 @@ func New(config Config, transport Transporter) *Device {
 }
 
 func (d *Device) Init() {
-	d.wake()
+	d.SAMConfig(0x01)
+	d.SetRetries(0xFF, 0x01, 0x14)
 }
 
 func (d *Device) SAMConfig(mode byte) error {
@@ -62,6 +63,20 @@ func (d *Device) GetFirmwareVersion() (FirmwareVersion, error) {
 		Revision: f.data[2],
 		Support:  f.data[3],
 	}, nil
+}
+
+// SetRetries configures PN532 retry limits via RFConfiguration.
+//
+//	atr:     Max ATR retries (0xFF = infinite)
+//	psl:     Max PSL retries
+//	passive: Max passive activation retries (~50ms each, 0x14 = ~1s, 0xFF = forever)
+func (d *Device) SetRetries(
+	atr byte,
+	psl byte,
+	passive byte,
+) error {
+	_, err := d.sendCommand(cmdRFConfiguration, []byte{0x05, atr, psl, passive})
+	return err
 }
 
 func (d *Device) ReadTag() ([]byte, error) {

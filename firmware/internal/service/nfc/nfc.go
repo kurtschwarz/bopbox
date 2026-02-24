@@ -57,7 +57,6 @@ func (s *Service) Start(
 
 	s.device = pn532.New(pn532.DefaultConfig, machine.UART0)
 	s.device.Init()
-	s.device.SAMConfig(0x01)
 
 	wg.Add(1)
 	go s.run(wg)
