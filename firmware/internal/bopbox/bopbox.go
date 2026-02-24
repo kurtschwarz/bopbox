@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"bopbox/internal/service"
+	"bopbox/internal/service/nfc"
 	"bopbox/internal/service/watchdog"
 )
 
@@ -29,11 +30,13 @@ type BopBox struct {
 
 type Services struct {
 	watchdog *watchdog.Service
+	nfc      *nfc.Service
 }
 
 func (s *Services) All() []service.Service {
 	return []service.Service{
 		s.watchdog,
+		s.nfc,
 	}
 }
 
@@ -43,6 +46,7 @@ func New(config Config) *BopBox {
 		log:    slog.Default().With("service", "bopbox"),
 		services: &Services{
 			watchdog: watchdog.New(watchdog.DefaultConfig),
+			nfc:      nfc.New(nfc.DefaultConfig),
 		},
 	}
 }

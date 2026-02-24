@@ -1,0 +1,78 @@
+package nfc
+
+import (
+	"log/slog"
+	"sync"
+	"time"
+
+	"machine"
+
+	"bopbox/internal/device/pn532"
+	"bopbox/internal/service"
+)
+
+var _ service.Service = (*Service)(nil)
+
+type Config struct {
+	TimeoutMs uint32
+	Interval  time.Duration
+}
+
+var DefaultConfig = Config{
+	TimeoutMs: 5000,
+	Interval:  500 * time.Millisecond,
+}
+
+type Service struct {
+	service.Base
+
+	log    *slog.Logger
+	config Config
+	device *pn532.Device
+}
+
+func New(config Config) *Service {
+	return &Service{
+		Base:   *service.New("nfc"),
+		log:    slog.Default().With("service", "nfc"),
+		config: config,
+		device: nil,
+	}
+}
+
+func (s *Service) Start(wg *sync.WaitGroup) error {
+	s.log.Info("starting")
+
+	machine.UART0.Configure(
+		machine.UARTConfig{
+			TX:       machine.GPIO0,
+			RX:       machine.GPIO1,
+			BaudRate: 115200,
+		},
+	)
+
+	s.device = pn532.New(pn532.DefaultConfig, machine.UART0)
+	s.device.Init()
+	s.device.SAMConfig(0x01)
+
+	firmware, err := s.device.GetFirmwareVersion()
+	if err != nil {
+		s.log.Error("failed to fetch firmware version", "error", err)
+	}
+
+	s.log.Info("pn532 firmware version", "firmware", firmware)
+
+	s.log.Info("started")
+
+	return nil
+}
+
+func (s *Service) Stop() error {
+	s.log.Info("stopping")
+	return nil
+}
+
+func (s *Service) run(wg *sync.WaitGroup) error {
+	s.log.Info("running")
+	return nil
+}
